@@ -4,6 +4,17 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 
+
+const { createClient } = require("@supabase/supabase-js");
+const multer = require("multer");
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+const upload = multer({ storage: multer.memoryStorage() });
+
 const STORES_FILE = "./stores.json";
 
 function loadStores() {
@@ -77,6 +88,54 @@ app.post("/print", (req, res) => {
   console.log("Impresión enviada a", storeId);
 
   res.json({ ok: true });
+});
+
+
+// ---------- UPLOAD EXCEL ----------
+app.post("/upload-excel", upload.single("excel"), async (req, res) => {
+  const { storeId } = req.body;
+
+  if (!storeId || !req.file) {
+    return res.json({ ok: false, message: "Faltan storeId o archivo" });
+  }
+
+  const filePath = `${storeId}/precios.xlsx`;
+
+  const { error } = await supabase.storage
+    .from("excels")
+    .upload(filePath, req.file.buffer, {
+      contentType: req.file.mimetype,
+      upsert: true
+    });
+
+  if (error) {
+    console.error("Error subiendo a Supabase:", error.message);
+    return res.json({ ok: false, message: error.message });
+  }
+
+  console.log(`Excel subido para tienda: ${storeId}`);
+  res.json({ ok: true });
+});
+
+
+// ---------- DOWNLOAD EXCEL ----------
+app.get("/excel/:tienda", async (req, res) => {
+  const { tienda } = req.params;
+  const filePath = `${tienda}/precios.xlsx`;
+
+  const { data, error } = await supabase.storage
+    .from("excels")
+    .download(filePath);
+
+  if (error) {
+    console.error("Error descargando de Supabase:", error.message);
+    return res.status(404).json({ ok: false, message: error.message });
+  }
+
+  const buffer = Buffer.from(await data.arrayBuffer());
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="precios.xlsx"`);
+  res.send(buffer);
 });
 
 // ---------- TEST MANUAL (GET para probar desde el browser) ----------
