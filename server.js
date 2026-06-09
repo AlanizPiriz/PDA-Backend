@@ -33,19 +33,20 @@ app.use(express.json());
 // ---------- LOGIN ----------
 app.post("/login", (req, res) => {
   const { user, password } = req.body;
+  const storeId = user.toLowerCase(); // ← nuevo
   let stores = loadStores();
 
-  if (!stores[user]) {
-    stores[user] = { password };
+  if (!stores[storeId]) {
+    stores[storeId] = { password };
     saveStores(stores);
-    console.log("Nueva tienda creada:", user);
+    console.log("Nueva tienda creada:", storeId);
   }
 
-  if (stores[user].password !== password) {
+  if (stores[storeId].password !== password) {
     return res.json({ ok: false, message: "Password incorrecta" });
   }
 
-  return res.json({ ok: true, storeId: user });
+  return res.json({ ok: true, storeId });
 });
 
 const server = http.createServer(app);
