@@ -114,6 +114,7 @@ app.post("/upload-excel", upload.single("excel"), async (req, res) => {
   }
 
   console.log(`Excel subido para tienda: ${storeId}`);
+  io.to(storeId).emit("nuevoExcel", { storeId });
   res.json({ ok: true });
 });
 
