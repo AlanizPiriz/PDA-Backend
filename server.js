@@ -12,6 +12,7 @@ if (!ADMIN_KEY) {
   throw new Error("Falta ADMIN_KEY en variables de entorno");
 }
 
+
 const { createClient } = require("@supabase/supabase-js");
 const multer = require("multer");
 
@@ -36,6 +37,45 @@ function saveStores(data) {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+
+function verificarAdmin(req, res, next) {
+  const key = req.headers["x-admin-key"];
+
+  if (!key || key !== ADMIN_KEY) {
+    return res.status(401).json({
+      ok: false,
+      error: "No autorizado"
+    });
+  }
+
+  next();
+}
+
+
+app.post("/admin/login", (req, res) => {
+  const { key } = req.body;
+
+  if (key !== ADMIN_KEY) {
+    return res.status(401).json({
+      ok: false,
+      error: "Clave incorrecta"
+    });
+  }
+
+  res.json({
+    ok: true,
+    token: ADMIN_KEY
+  });
+});
+
+app.get("/admin/test", verificarAdmin, (req, res) => {
+  res.json({
+    ok: true,
+    message: "Admin autorizado"
+  });
+});
+
 
 app.post("/login", async (req, res) => {
   const { user, password } = req.body;
