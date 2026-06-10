@@ -88,6 +88,30 @@ app.get("/admin/test", verificarAdmin, (req, res) => {
 });
 
 
+
+
+
+app.get("/admin/test-log", (req, res) => {
+
+  emitirAdminLog({
+    fecha: new Date().toLocaleTimeString(),
+    usuario: "TEST",
+    accion: "debug",
+    estado: "ok",
+    mensaje: "Log admin funcionando 🔥"
+  });
+
+  res.json({
+    ok: true
+  });
+});
+
+
+
+
+
+
+
 app.post("/login", async (req, res) => {
   const { user, password } = req.body;
   const storeId = user.toLowerCase();
@@ -135,7 +159,16 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log(`Cliente desconectado: ${socket.id}`);
   });
+
+  socket.on("join-admin", () => {
+  socket.join("admin-room");
+  console.log("🟢 Admin conectado");
+  });
 });
+
+function emitirAdminLog(log) {
+  io.to("admin-room").emit("admin-log", log);
+}
 
 app.post("/print", async (req, res) => {
   const { storeId, tickets } = req.body;
@@ -148,11 +181,25 @@ app.post("/print", async (req, res) => {
   console.log(`Emitiendo a sala "${storeId}". Sockets en sala:`, sala ? [...sala] : "SALA VACÍA ⚠️");
 
   if (!sala || sala.size === 0) {
+    emitirAdminLog({
+      fecha: new Date().toLocaleTimeString(),
+      usuario: storeId,
+      accion: "print",
+      estado: "error",
+      mensaje: "EXE no conectado - sala vacía"
+    });
     await guardarLog(storeId, "print_error", null, "EXE no conectado - sala vacía");
     return res.json({ ok: false, message: "EXE no conectado" });
   }
 
   io.to(storeId).emit("print", { storeId, tickets });
+  emitirAdminLog({
+    fecha: new Date().toLocaleTimeString(),
+    usuario: storeId,
+    accion: "print",
+    estado: "ok",
+    mensaje: `${tickets.length} bytes enviados`
+  });
   await guardarLog(storeId, "print_ok", `${tickets.length} bytes enviados`);
   console.log("Impresión enviada a", storeId);
 
@@ -265,3 +312,5 @@ app.get("/admin/logs", async (req, res) => {
 
   res.json({ ok: true, logs: data });
 });
+
+
