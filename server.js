@@ -30,10 +30,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ---------- LOGIN ----------
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
   const { user, password } = req.body;
-  const storeId = user.toLowerCase(); // ← nuevo
+  const storeId = user.toLowerCase();
   let stores = loadStores();
 
   if (!stores[storeId]) {
@@ -43,16 +42,11 @@ app.post("/login", (req, res) => {
   }
 
   if (stores[storeId].password !== password) {
+    await guardarLog(storeId, "login_fallido", `Usuario: ${user}`, "Password incorrecta");
     return res.json({ ok: false, message: "Password incorrecta" });
   }
 
   return res.json({ ok: true, storeId });
-});
-
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" },
-  transports: ["websocket", "polling"]
 });
 
 // ---------- SOCKETS ----------
@@ -73,24 +67,27 @@ io.on("connection", (socket) => {
   });
 });
 
-// ---------- PRINT ----------
-app.post("/print", (req, res) => {
+app.post("/print", async (req, res) => {
   const { storeId, tickets } = req.body;
 
   if (!storeId || !tickets) {
     return res.json({ ok: false, message: "Faltan storeId o tickets" });
   }
 
-  // ✅ Ver a qué sala se va a emitir antes de emitir
   const sala = io.sockets.adapter.rooms.get(storeId);
   console.log(`Emitiendo a sala "${storeId}". Sockets en sala:`, sala ? [...sala] : "SALA VACÍA ⚠️");
 
+  if (!sala || sala.size === 0) {
+    await guardarLog(storeId, "print_error", null, "EXE no conectado - sala vacía");
+    return res.json({ ok: false, message: "EXE no conectado" });
+  }
+
   io.to(storeId).emit("print", { storeId, tickets });
+  await guardarLog(storeId, "print_ok", `${tickets.length} bytes enviados`);
   console.log("Impresión enviada a", storeId);
 
   res.json({ ok: true });
 });
-
 
 // ---------- UPLOAD EXCEL ----------
 app.post("/upload-excel", upload.single("excel"), async (req, res) => {
@@ -116,6 +113,7 @@ app.post("/upload-excel", upload.single("excel"), async (req, res) => {
 
   console.log(`Excel subido para tienda: ${storeId}`);
   io.to(storeId).emit("nuevoExcel", { storeId, fileName: req.file.originalname });
+  await guardarLog(storeId, "excel_subido", req.file.originalname);
   res.json({ ok: true, fileName: req.file.originalname });
 });
 
@@ -160,3 +158,16 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Servidor corriendo en puerto ${PORT}`);
 });
+
+async function guardarLog(storeId, evento, detalle = null, error = null) {
+  try {
+    await supabase.from("logs").insert({
+      store_id: storeId,
+      evento,
+      detalle,
+      error
+    });
+  } catch (err) {
+    console.error("Error guardando log:", err.message);
+  }
+}
