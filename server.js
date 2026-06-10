@@ -1,11 +1,16 @@
+require("dotenv").config();
+
 const fs = require("fs");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 
-const ADMIN_KEY = process.env.ADMIN_KEY || "admin123";
+const ADMIN_KEY = process.env.ADMIN_KEY;
 
+if (!ADMIN_KEY) {
+  throw new Error("Falta ADMIN_KEY en variables de entorno");
+}
 
 const { createClient } = require("@supabase/supabase-js");
 const multer = require("multer");
