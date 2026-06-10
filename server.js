@@ -4,6 +4,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 
+const ADMIN_KEY = process.env.ADMIN_KEY || "admin123";
+
 
 const { createClient } = require("@supabase/supabase-js");
 const multer = require("multer");
@@ -47,6 +49,18 @@ app.post("/login", async (req, res) => {
   }
 
   return res.json({ ok: true, storeId });
+});
+
+
+// ✅ crear servidor HTTP
+const server = http.createServer(app);
+
+// ✅ inicializar socket.io
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
 });
 
 // ---------- SOCKETS ----------
@@ -171,3 +185,27 @@ async function guardarLog(storeId, evento, detalle = null, error = null) {
     console.error("Error guardando log:", err.message);
   }
 }
+
+
+// ---------- ADMIN LOGS ----------
+app.get("/admin/logs", async (req, res) => {
+  const key = req.headers["x-admin-key"];
+  if (key !== ADMIN_KEY) {
+    return res.status(401).json({ ok: false, message: "No autorizado" });
+  }
+
+  const storeId = req.query.storeId;
+  let query = supabase.from("logs").select("*").order("created_at", { ascending: false }).limit(100);
+
+  if (storeId) {
+    query = query.eq("store_id", storeId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return res.json({ ok: false, message: error.message });
+  }
+
+  res.json({ ok: true, logs: data });
+});
