@@ -314,3 +314,20 @@ app.get("/admin/logs", async (req, res) => {
 });
 
 
+// ---------- EXCEL INFO ----------
+app.get("/excel-info/:tienda", async (req, res) => {
+  const { tienda } = req.params;
+  const filePath = `${tienda}/precios.xlsx`;
+
+  const { data, error } = await supabase.storage
+    .from("excels")
+    .list(tienda, { search: "precios.xlsx" });
+
+  if (error || !data || data.length === 0) {
+    return res.json({ ok: false });
+  }
+
+  res.json({ ok: true, updatedAt: data[0].updated_at });
+});
+
+
