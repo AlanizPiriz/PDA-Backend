@@ -158,34 +158,25 @@ io.on("connection", (socket) => {
       socket.join(storeId);
 
       // guardar tienda conectada
-      socket.storeId =
-        storeId;
+      socket.on("register", (data) => {
+  const storeId = data.storeId;
 
-      tiendasEstado[
-        storeId
-      ] = {
-        online: true,
-        lastSeen:
-          Date.now()
-      };
-    
-      // avisar al admin
-      io.to("admin-room").emit(
-        "store-status",
-        tiendasEstado
-      );
-    
-      console.log(
-        `Socket ${socket.id} registrado en sala: "${storeId}"`
-      );
-    
-      console.log(
-        "Salas activas:",
-        [
-          ...io.sockets.adapter.rooms.keys()
-        ]
-      );
-    });
+  socket.join(storeId);
+  socket.storeId = storeId;
+
+  // ✅ Guardar clientType — si no viene, es el EXE
+  socket.data.clientType = data.clientType || "printer";
+
+  tiendasEstado[storeId] = {
+    online: true,
+    lastSeen: Date.now()
+  };
+
+  io.to("admin-room").emit("store-status", tiendasEstado);
+
+  console.log(`Socket ${socket.id} registrado en sala: "${storeId}" | tipo: ${socket.data.clientType}`);
+  console.log("Salas activas:", [...io.sockets.adapter.rooms.keys()]);
+});
 
   socket.on("disconnect", () => {
 
