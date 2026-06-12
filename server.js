@@ -150,13 +150,6 @@ io.on("connection", (socket) => {
     console.log(`Cliente conectado: ${socket.id}`);
 
     // ✅ UN SOLO handler de register
-    socket.on("register", (data) => {
-
-      const storeId =
-        data.storeId;
-
-      socket.join(storeId);
-
       // guardar tienda conectada
       socket.on("register", (data) => {
   const storeId = data.storeId;
