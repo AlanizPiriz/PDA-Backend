@@ -145,19 +145,42 @@ const io = new Server(server, {
 
 // ---------- SOCKETS ----------
 io.on("connection", (socket) => {
-  console.log(`Cliente conectado: ${socket.id}`);
+    console.log(`Cliente conectado: ${socket.id}`);
 
-  // ✅ UN SOLO handler de register
-  socket.on("register", (data) => {
+    // ✅ UN SOLO handler de register
+    socket.on("register", (data) => {
     const storeId = data.storeId;
+
+    const clientType =
+      data.clientType === "web"
+        ? "web"
+        : "printer";
+
     socket.join(storeId);
-    console.log(`Socket ${socket.id} registrado en sala: "${storeId}"`);
-    // Útil para debuggear: ver todas las salas activas
-    console.log("Salas activas:", [...io.sockets.adapter.rooms.keys()]);
+
+    socket.data.storeId = storeId;
+    socket.data.clientType = clientType;
+
+    console.log(
+      `Socket ${socket.id} registrado en "${storeId}" como ${clientType}`
+    );
+
+    console.log(
+      "Salas activas:",
+      [...io.sockets.adapter.rooms.keys()]
+    );
   });
 
   socket.on("disconnect", () => {
     console.log(`Cliente desconectado: ${socket.id}`);
+  });
+
+  socket.on("print-confirmed", ({ storeId }) => {
+    io.to(storeId).emit("print-confirmed");
+
+    console.log(
+      `Impresión confirmada para ${storeId}`
+    );
   });
 
   socket.on("join-admin", () => {
@@ -174,25 +197,63 @@ app.post("/print", async (req, res) => {
   const { storeId, tickets } = req.body;
 
   if (!storeId || !tickets) {
-    return res.json({ ok: false, message: "Faltan storeId o tickets" });
+    return res.json({
+      ok: false,
+      message: "Faltan storeId o tickets"
+    });
   }
 
-  const sala = io.sockets.adapter.rooms.get(storeId);
-  console.log(`Emitiendo a sala "${storeId}". Sockets en sala:`, sala ? [...sala] : "SALA VACÍA ⚠️");
+  const sala =
+    io.sockets.adapter.rooms.get(storeId);
 
-  if (!sala || sala.size === 0) {
+  console.log(
+    `Emitiendo a sala "${storeId}". Sockets en sala:`,
+    sala ? [...sala] : "SALA VACÍA ⚠️"
+  );
+
+  const sockets =
+    await io.in(storeId).fetchSockets();
+
+  const printers = sockets.filter(
+    socket =>
+      socket.data.clientType === "printer"
+  );
+
+  console.log(
+    `Impresoras encontradas: ${printers.length}`
+  );
+
+  // ← VALIDACIÓN REAL
+  if (printers.length === 0) {
     emitirAdminLog({
       fecha: new Date().toLocaleTimeString(),
       usuario: storeId,
       accion: "print",
       estado: "error",
-      mensaje: "EXE no conectado - sala vacía"
+      mensaje:
+        "EXE no conectado - impresora no encontrada"
     });
-    await guardarLog(storeId, "print_error", null, "EXE no conectado - sala vacía");
-    return res.json({ ok: false, message: "EXE no conectado" });
+
+    await guardarLog(
+      storeId,
+      "print_error",
+      null,
+      "EXE no conectado"
+    );
+
+    return res.json({
+      ok: false,
+      message: "EXE no conectado"
+    });
   }
 
-  io.to(storeId).volatile.emit("print", { storeId, tickets });
+  printers.forEach(socket => {
+    socket.volatile.emit("print", {
+      storeId,
+      tickets
+    });
+  });
+
   emitirAdminLog({
     fecha: new Date().toLocaleTimeString(),
     usuario: storeId,
@@ -200,8 +261,17 @@ app.post("/print", async (req, res) => {
     estado: "ok",
     mensaje: `${tickets.length} bytes enviados`
   });
-  await guardarLog(storeId, "print_ok", `${tickets.length} bytes enviados`);
-  console.log("Impresión enviada a", storeId);
+
+  await guardarLog(
+    storeId,
+    "print_ok",
+    `${tickets.length} bytes enviados`
+  );
+
+  console.log(
+    "Impresión enviada a",
+    storeId
+  );
 
   res.json({ ok: true });
 });
