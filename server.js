@@ -135,6 +135,8 @@ app.post("/login", async (req, res) => {
 // ✅ crear servidor HTTP
 const server = http.createServer(app);
 
+const tiendasEstado = {};
+
 // ✅ inicializar socket.io
 const io = new Server(server, {
   cors: {
@@ -149,30 +151,65 @@ io.on("connection", (socket) => {
 
     // ✅ UN SOLO handler de register
     socket.on("register", (data) => {
-    const storeId = data.storeId;
 
-    const clientType =
-      data.clientType === "web"
-        ? "web"
-        : "printer";
+      const storeId =
+        data.storeId;
 
-    socket.join(storeId);
+      socket.join(storeId);
 
-    socket.data.storeId = storeId;
-    socket.data.clientType = clientType;
+      // guardar tienda conectada
+      socket.storeId =
+        storeId;
 
-    console.log(
-      `Socket ${socket.id} registrado en "${storeId}" como ${clientType}`
-    );
-
-    console.log(
-      "Salas activas:",
-      [...io.sockets.adapter.rooms.keys()]
-    );
-  });
+      tiendasEstado[
+        storeId
+      ] = {
+        online: true,
+        lastSeen:
+          Date.now()
+      };
+    
+      // avisar al admin
+      io.to("admin-room").emit(
+        "store-status",
+        tiendasEstado
+      );
+    
+      console.log(
+        `Socket ${socket.id} registrado en sala: "${storeId}"`
+      );
+    
+      console.log(
+        "Salas activas:",
+        [
+          ...io.sockets.adapter.rooms.keys()
+        ]
+      );
+    });
 
   socket.on("disconnect", () => {
-    console.log(`Cliente desconectado: ${socket.id}`);
+
+    console.log(
+      `Cliente desconectado: ${socket.id}`
+    );
+  
+    // si era una tienda registrada
+    if (socket.storeId) {
+    
+      tiendasEstado[
+        socket.storeId
+      ] = {
+        online: false,
+        lastSeen:
+          Date.now()
+      };
+    
+      // avisar al admin
+      io.to("admin-room").emit(
+        "store-status",
+        tiendasEstado
+      );
+    }
   });
 
   socket.on("print-confirmed", ({ storeId }) => {
