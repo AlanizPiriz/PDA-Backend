@@ -140,7 +140,10 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  // agregá esto:
+  connectTimeout: 45000,
+  transports: ["websocket"]
 });
 
 // ---------- SOCKETS ----------
@@ -192,7 +195,7 @@ app.post("/print", async (req, res) => {
     return res.json({ ok: false, message: "EXE no conectado" });
   }
 
-  io.to(storeId).emit("print", { storeId, tickets });
+  io.to(storeId).volatile.emit("print", { storeId, tickets });
   emitirAdminLog({
     fecha: new Date().toLocaleTimeString(),
     usuario: storeId,
