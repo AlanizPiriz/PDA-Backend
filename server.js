@@ -141,9 +141,6 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  // agregá esto:
-  connectTimeout: 45000,
-  transports: ["websocket"]
 });
 
 // ---------- SOCKETS ----------
