@@ -197,7 +197,7 @@ app.post("/print", async (req, res) => {
   const { storeId, tickets } = req.body;
 
   if (!storeId || !tickets) {
-    return res.json({
+    return res.status(400).json({
       ok: false,
       message: "Faltan storeId o tickets"
     });
@@ -223,7 +223,6 @@ app.post("/print", async (req, res) => {
     `Impresoras encontradas: ${printers.length}`
   );
 
-  // ← VALIDACIÓN REAL
   if (printers.length === 0) {
     emitirAdminLog({
       fecha: new Date().toLocaleTimeString(),
@@ -241,7 +240,7 @@ app.post("/print", async (req, res) => {
       "EXE no conectado"
     );
 
-    return res.json({
+    return res.status(503).json({
       ok: false,
       message: "EXE no conectado"
     });
@@ -273,7 +272,9 @@ app.post("/print", async (req, res) => {
     storeId
   );
 
-  res.json({ ok: true });
+  return res.status(200).json({
+    ok: true
+  });
 });
 
 // ---------- UPLOAD EXCEL ----------
