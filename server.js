@@ -334,39 +334,60 @@ app.get("/excel/:tienda", async (req, res) => {
   const { tienda } = req.params;
   const filePath = `${tienda}/precios.xlsx`;
 
+  let fechaModificacion = new Date().toISOString(); 
+
+  // 1. OBTENER LA FECHA REAL USANDO .list() (Compatible con versiones viejas)
   try {
-    // 1. Obtener metadatos desde Supabase
-    const { data: metadata, error: metaError } = await supabase.storage
+    // Listamos el contenido de la carpeta de la tienda
+    const { data: archivos, error: listError } = await supabase.storage
       .from("excels")
-      .getMetadata(filePath);
+      .list(tienda, {
+        limit: 10,
+        search: "precios.xlsx" // Buscamos solo este archivo
+      });
 
-    let fechaModificacion = new Date().toISOString(); 
-    if (!metaError && metadata) {
-      fechaModificacion = metadata.last_modified; 
+    if (listError) {
+      console.error("⚠️ Error listando archivos de Supabase:", listError.message);
+    } else if (archivos && archivos.length > 0) {
+      // Supabase devuelve una lista. Buscamos el archivo exacto
+      const archivoExcel = archivos.find(f => f.name === "precios.xlsx");
+      if (archivoExcel && archivoExcel.updated_at) {
+        fechaModificacion = archivoExcel.updated_at; // Aquí está la fecha real de subida
+      }
     }
+  } catch (metaCatchError) {
+    console.error("⚠️ Fallo crítico leyendo lista de archivos:", metaCatchError);
+  }
 
-    // 2. Descargar archivo
+  // 2. DESCARGAR EL ARCHIVO (Igual que antes)
+  try {
     const { data, error } = await supabase.storage
       .from("excels")
       .download(filePath);
 
     if (error) {
-      console.error("Error descargando de Supabase:", error.message);
+      console.error("❌ Error descargando de Supabase:", error.message);
       return res.status(404).json({ ok: false, message: error.message });
+    }
+
+    if (!data) {
+      return res.status(404).json({ ok: false, message: "Archivo vacío o no encontrado" });
     }
 
     const buffer = Buffer.from(await data.arrayBuffer());
     
-    // 3. Inyectar cabeceras estándar y personalizada
+    // 3. ENVIAR RESPUESTA
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="precios.xlsx"`);
-    res.setHeader("X-File-Updated-At", fechaModificacion); // El middleware de CORS se encarga de exponerlo
+    res.setHeader("X-File-Updated-At", fechaModificacion);
 
-    res.send(buffer);
+    return res.send(buffer);
 
   } catch (err) {
-    console.error("Error general en endpoint excel:", err);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    console.error("💥 Error general interno en endpoint excel:", err);
+    if (!res.headersSent) {
+      return res.status(500).json({ ok: false, message: err.message });
+    }
   }
 });
 
