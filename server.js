@@ -44,7 +44,8 @@ app.use(cors({
     "https://alanizpiriz.github.io"
   ],
   methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type", "x-admin-key"]
+  allowedHeaders: ["Content-Type", "x-admin-key"],
+  exposedHeaders: ["X-File-Updated-At", "Content-Disposition"] 
 }));
 
 app.use(express.json());
@@ -328,24 +329,47 @@ app.post("/upload-excel", upload.single("excel"), async (req, res) => {
 
 
 // ---------- DOWNLOAD EXCEL ----------
+// ---------- DOWNLOAD EXCEL ----------
 app.get("/excel/:tienda", async (req, res) => {
   const { tienda } = req.params;
   const filePath = `${tienda}/precios.xlsx`;
 
-  const { data, error } = await supabase.storage
-    .from("excels")
-    .download(filePath);
+  try {
+    // 1. Obtener metadatos desde Supabase
+    const { data: metadata, error: metaError } = await supabase.storage
+      .from("excels")
+      .getMetadata(filePath);
 
-  if (error) {
-    console.error("Error descargando de Supabase:", error.message);
-    return res.status(404).json({ ok: false, message: error.message });
+    let fechaModificacion = new Date().toISOString(); 
+    if (!metaError && metadata) {
+      fechaModificacion = metadata.last_modified; 
+    }
+
+    // 2. Descargar archivo
+    const { data, error } = await supabase.storage
+      .from("excels")
+      .download(filePath);
+
+    if (error) {
+      console.error("Error descargando de Supabase:", error.message);
+      return res.status(404).json({ ok: false, message: error.message });
+    }
+
+    const buffer = Buffer.from(await data.arrayBuffer());
+    
+    // 3. Inyectar cabeceras estándar y personalizada
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="precios.xlsx"`);
+    res.setHeader("X-File-Updated-At", fechaModificacion); // El middleware de CORS se encarga de exponerlo
+
+    res.send(buffer);
+
+  } catch (err) {
+    console.error("Error general en endpoint excel:", err);
+    res.status(500).json({ ok: false, message: "Error interno del servidor" });
   }
-
-  const buffer = Buffer.from(await data.arrayBuffer());
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="precios.xlsx"`);
-  res.send(buffer);
 });
+
 
 // ---------- TEST MANUAL (GET para probar desde el browser) ----------
 app.get("/test-print/:storeId", (req, res) => {
